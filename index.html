@@ -1,0 +1,108 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SEC Data Viewer</title><link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"></head><body class="bg-gray-100 font-sans antialiased"><div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl"><header class="bg-white shadow-md rounded-lg p-6 mb-8 text-center"><h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2"><span id="share-entity-name">Loading Company...</span> - Common Stock Shares Outstanding</h1><p class="text-gray-600">(Fiscal Year 
+ 2020)</p></header><main class="grid grid-cols-1 md:grid-cols-2 gap-8"><div class="bg-white shadow-md rounded-lg p-6 flex flex-col items-center justify-center text-center"><h2 class="text-2xl font-semibold text-gray-700 mb-4">Maximum Shares Outstanding</h2><div class="text-5xl font-extrabold text-blue-600 mb-2" id="share-max-value">Loading...</div><p class="text-lg text-gray-500 mb-4">Fiscal Year: <span class="font-medium" id="share-max-fy">Loading...</span></p></div><div class="bg-white shadow-md rounded-lg p-6 flex flex-col items-center justify-center text-center"><h2 class="text-2xl font-semibold text-gray-700 mb-4">Minimum Shares Outstanding</h2><div class="text-5xl font-extrabold text-green-600 mb-2" id="share-min-value">Loading...</div><p class="text-lg text-gray-500 mb-4">Fiscal Year: <span class="font-medium" id="share-min-fy">Loading...</span></p></div></main><footer class="mt-12 text-center text-gray-500 text-sm"><p>&copy; 2023 SEC Data Viewer. Data provided by SEC XBRL API.</p><p>Visit: <a href="index.html?CIK=0001018724" class="text-blue-500 hover:underline">Apple Inc. (CIK 0001018724)</a></p></footer></div><script>// SEC guidance: Set a descriptive User-Agent
+        // IMPORTANT: Replace with your actual company name and email.
+        const USER_AGENT = "AppliedMaterials-CIK-App myemail@appliedmaterials.com";
+
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return 'N/A';
+            return num.toLocaleString('en-US');
+        }
+
+        async function loadCompanyData(cik) {
+            const defaultCik = '0000006951'; // Applied Materials
+            const currentCik = cik || defaultCik;
+
+            // Using allorigins.win as a public CORS proxy for SEC API requests.
+            // SEC guidance: "Please use a descriptive User-Agent" header.
+            const secApiUrl = `https://data.sec.gov/api/xbrl/companyconcept/CIK${currentCik}/dei/EntityCommonStockSharesOutstanding.json`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(secApiUrl)}`;
+
+            // Update loading states
+            document.title = "Loading Company Data...";
+            document.getElementById('share-entity-name').textContent = "Loading Company...";
+            document.querySelector('h1').textContent = "Loading Company... - Common Stock Shares Outstanding";
+
+            const elementsToUpdate = ['share-max-value', 'share-max-fy', 'share-min-value', 'share-min-fy'];
+            elementsToUpdate.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = 'Loading...';
+            });
+
+            try {
+                // Fetch using proxy
+                const response = await fetch(proxyUrl, {
+                     headers: {
+                        'User-Agent': USER_AGENT
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const entityName = data.entityName;
+                const sharesData = data.units.shares;
+
+                let maxVal = -1;
+                let minVal = Infinity;
+                let maxFy = null;
+                let minFy = null;
+
+                sharesData.forEach(entry => {
+                    const fy = parseInt(entry.fy);
+                    const val = entry.val;
+
+                    if (fy > 2020 && typeof val === 'number') {
+                        if (val > maxVal) {
+                            maxVal = val;
+                            maxFy = fy;
+                        }
+                        if (val < minVal) {
+                            minVal = val;
+                            minFy = fy;
+                        }
+                    }
+                });
+
+                // Update DOM with fetched data
+                document.title = `${entityName} - Common Stock Shares Outstanding`;
+                document.getElementById('share-entity-name').textContent = entityName;
+                document.querySelector('h1').textContent = `${entityName} - Common Stock Shares Outstanding`;
+
+
+                document.getElementById('share-max-value').textContent = formatNumber(maxVal);
+                document.getElementById('share-max-fy').textContent = maxFy || 'N/A';
+
+                document.getElementById('share-min-value').textContent = formatNumber(minVal);
+                document.getElementById('share-min-fy').textContent = minFy || 'N/A';
+
+                // data.json structure as requested in prompt, logged to console
+                const resultData = {
+                    entityName: entityName,
+                    max: { val: maxVal, fy: maxFy },
+                    min: { val: minVal, fy: minFy }
+                };
+                console.log("Processed Data:", resultData);
+
+            } catch (error) {
+                console.error("Failed to fetch or process company data:", error);
+                document.title = "Error Loading Data";
+                document.getElementById('share-entity-name').textContent = "Error";
+                document.querySelector('h1').textContent = "Error Loading Data";
+
+                const elementsToUpdate = ['share-max-value', 'share-max-fy', 'share-min-value', 'share-min-fy'];
+                elementsToUpdate.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = 'Failed to load';
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const cikParam = urlParams.get('CIK');
+            loadCompanyData(cikParam);
+        });
+    </script></body></html>
